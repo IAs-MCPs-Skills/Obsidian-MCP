@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
 import { FileSystemService } from "./filesystem.js";
 import { FrontmatterHandler, parseFrontmatter } from "./frontmatter.js";
 import { PathFilter } from "./pathfilter.js";
@@ -10,12 +10,56 @@ export function createServer(vaultPath, options = {}) {
     const resolvedVaultPath = resolve(vaultPath);
     const fileSystem = new FileSystemService(resolvedVaultPath, pathFilter, frontmatterHandler);
     const searchService = new SearchService(resolvedVaultPath, pathFilter);
+    // Paths to the vault onboarding files (relative to vault root)
+    const VAULT_GUIDE_PATH = "500-599_Conexao_e_Navegacao/Guia_IA_No_Vault.md";
+    const VAULT_MISSION_PATH = "500-599_Conexao_e_Navegacao/MOC_Missao_Ativa.md";
+    async function readVaultBootstrap() {
+        let guideContent = "";
+        let missionContent = "";
+        try {
+            const guide = await fileSystem.readNote(VAULT_GUIDE_PATH);
+            guideContent = guide.content ?? "";
+        }
+        catch {
+            guideContent = `(${VAULT_GUIDE_PATH} not found — vault onboarding guide has not been created yet)`;
+        }
+        try {
+            const mission = await fileSystem.readNote(VAULT_MISSION_PATH);
+            missionContent = mission.content ?? "";
+        }
+        catch {
+            missionContent = `(${VAULT_MISSION_PATH} not found — active projects list has not been created yet)`;
+        }
+        return [
+            "=== VAULT GUIDE (Guia_IA_No_Vault.md) ===",
+            "",
+            guideContent,
+            "",
+            "=== ACTIVE PROJECTS (MOC_Missao_Ativa.md) ===",
+            "",
+            missionContent,
+        ].join("\n");
+    }
     const server = new Server({ name, version }, {
-        capabilities: { tools: {} },
+        capabilities: { tools: {}, prompts: {} },
     });
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         return {
             tools: [
+                {
+                    name: "vault_bootstrap",
+                    description: [
+                        "CALL THIS FIRST if you have no prior context about this Obsidian vault.",
+                        "Returns two documents in a single call:",
+                        "1. The complete vault onboarding guide: folder structure (000-999 layers), YAML schema, full taxonomy vocabulary, how Estado_Atual and Handoff work, rules for IAs, what you can and cannot do.",
+                        "2. The active projects list (MOC_Missao_Ativa): all current projects with direct links to Estado_Atual and last Handoff.",
+                        "After calling this tool you will have everything needed to operate in this vault without asking the user for explanations.",
+                    ].join(" "),
+                    inputSchema: {
+                        type: "object",
+                        properties: {},
+                    }
+                },
                 {
                     name: "read_note",
                     description: "Read a note from the Obsidian vault",
@@ -216,6 +260,12 @@ export function createServer(vaultPath, options = {}) {
         const trimmedArgs = trimPaths(args);
         try {
             switch (toolName) {
+                case "vault_bootstrap": {
+                    const bootstrapContent = await readVaultBootstrap();
+                    return {
+                        content: [{ type: "text", text: bootstrapContent }]
+                    };
+                }
                 case "read_note": {
                     const note = await fileSystem.readNote(trimmedArgs.path);
                     const indent = trimmedArgs.prettyPrint ? 2 : undefined;
@@ -376,6 +426,41 @@ export function createServer(vaultPath, options = {}) {
                 isError: true
             };
         }
+    });
+    // MCP Prompts — vault context injected as a named prompt template.
+    // Clients that auto-load prompts (e.g. Claude Desktop) will inject this at session start.
+    server.setRequestHandler(ListPromptsRequestSchema, async () => {
+        return {
+            prompts: [
+                {
+                    name: "vault_context",
+                    description: "Complete Obsidian vault onboarding guide and active projects list. Read before any vault operation when you have no prior session context.",
+                }
+            ]
+        };
+    });
+    server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+        const { name: promptName } = request.params;
+        if (promptName === "vault_context") {
+            const bootstrapContent = await readVaultBootstrap();
+            return {
+                messages: [
+                    {
+                        role: "user",
+                        content: {
+                            type: "text",
+                            text: [
+                                "You are connecting to an Obsidian vault. The vault has a specific structure, YAML schema, taxonomy vocabulary, and operational rules that you must follow.",
+                                "Read the vault guide and active projects below before taking any action.",
+                                "",
+                                bootstrapContent,
+                            ].join("\n"),
+                        }
+                    }
+                ]
+            };
+        }
+        throw new Error(`Prompt not found: ${promptName}`);
     });
     return server;
 }
