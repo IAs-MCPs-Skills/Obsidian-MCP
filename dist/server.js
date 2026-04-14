@@ -7,7 +7,21 @@ import { dirname, join, resolve } from "path";
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const packageJson = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf-8"));
+let packageJson;
+try {
+    // Try current directory (source root or dist)
+    packageJson = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
+}
+catch (e) {
+    // Try parent directory (if running from dist)
+    try {
+        packageJson = JSON.parse(readFileSync(join(dirname(__dirname), "package.json"), "utf-8"));
+    }
+    catch (e2) {
+        console.error("Error: Could not find package.json to read version");
+        process.exit(1);
+    }
+}
 const VERSION = packageJson.version;
 // Handle --version and --help flags
 const cliArgs = process.argv.slice(2);
