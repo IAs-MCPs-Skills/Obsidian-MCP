@@ -1,0 +1,15 @@
+{
+  "name": "obsidian-mcp-dev",
+  "description": "Skills for working with Obsidian vaults via MCP, CLI, and git sync",
+  "owner": {
+    "name": "bitbonsai"
+  },
+  "plugins": [
+    {
+      "name": "obsidian-mcp",
+      "description": "Obsidian vault operations via MCP tools, git sync, and CLI — notes, tags, frontmatter, search, and backup",
+      "version": "0.11.0",
+      "source": "./"
+    }
+  ]
+}
