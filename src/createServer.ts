@@ -33,10 +33,12 @@ export function createServer(vaultPath: string, options: CreateServerOptions = {
   // Paths to the vault onboarding files (relative to vault root)
   const VAULT_GUIDE_PATH = "500-599_Conexao_e_Navegacao/Guia_IA_No_Vault.md";
   const VAULT_MISSION_PATH = "500-599_Conexao_e_Navegacao/MOC_Missao_Ativa.md";
+  const VAULT_RULES_PATH = "700-799_Operacao_e_Memoria_IA/720_Global/Regras_Memoria_e_Identidade_IA.md";
 
   async function readVaultBootstrap(): Promise<string> {
     let guideContent = "";
     let missionContent = "";
+    let rulesContent = "";
 
     try {
       const guide = await fileSystem.readNote(VAULT_GUIDE_PATH);
@@ -52,7 +54,61 @@ export function createServer(vaultPath: string, options: CreateServerOptions = {
       missionContent = `(${VAULT_MISSION_PATH} not found — active projects list has not been created yet)`;
     }
 
+    try {
+      const rules = await fileSystem.readNote(VAULT_RULES_PATH);
+      rulesContent = rules.content ?? "";
+    } catch {
+      rulesContent = `(${VAULT_RULES_PATH} not found)`;
+    }
+
+    const SESSION_START_PROTOCOL = [
+      "=== MANDATORY SESSION START PROTOCOL ===",
+      "",
+      "You have just bootstrapped. Follow these steps NOW before doing anything else:",
+      "",
+      "1. READ the vault guide below — understand folder structure, YAML rules, taxonomy vocabulary.",
+      "2. READ the active projects list below — identify which project is relevant to this session.",
+      "3. READ the Estado_Atual of the relevant project (path: 700-799_Operacao_e_Memoria_IA/710_Projetos/<ID>/<ID>_Estado_Atual.md).",
+      "4. If you need narrative context from the last session, read the Handoff file linked in MOC_Missao_Ativa.",
+      "5. Only then start working.",
+      "",
+      "MEMORY RULES — non-negotiable:",
+      "- Obsidian vault (via MCP) is the ONLY valid memory. Never use .claude-pj or any local harness memory.",
+      "- Vault path and username vary per machine — never hardcode them. You already have access via MCP.",
+      "- Every piece of context that must persist between sessions goes into the vault, nowhere else.",
+    ].join("\n");
+
+    const SESSION_CLOSE_PROTOCOL = [
+      "=== MANDATORY SESSION CLOSE PROTOCOL ===",
+      "",
+      "At the end of any significant work session, you MUST do ALL of the following:",
+      "",
+      "1. UPDATE Estado_Atual (700-799_Operacao_e_Memoria_IA/710_Projetos/<ID>/<ID>_Estado_Atual.md):",
+      "   - File status tables",
+      "   - Pending tasks (checkboxes)",
+      "   - Next immediate step",
+      "   - Active decisions table (if anything changed)",
+      "",
+      "2. CREATE a session note at: 700-799_Operacao_e_Memoria_IA/710_Projetos/<ID>/Sessoes/<ID>_Sessao_YYYY-MM-DD_HHmm.md",
+      "   - YAML field 'anterior:' must link to the previous session note",
+      "   - Body must also reference the previous session",
+      "   - Content: what the user asked, what was done, decisions with rationale, bugs found, what remains",
+      "",
+      "3. UPDATE the Handoff file (LIFO stack — most recent session at the TOP):",
+      "   - Keep only the 5 most recent sessions in the stack",
+      "   - If a 6th entry would be added, remove the oldest (but the session note itself stays in Sessoes/)",
+      "",
+      "4. UPDATE MOC_Missao_Ativa (500-599_Conexao_e_Navegacao/MOC_Missao_Ativa.md):",
+      "   - Update project status",
+      "   - Update the Ultimo Handoff link",
+      "",
+      "DO NOT end the session without completing these steps.",
+      "If the session was trivial (single question, no code changed), steps 2-4 can be skipped — but step 1 is always required if anything changed.",
+    ].join("\n");
+
     return [
+      SESSION_START_PROTOCOL,
+      "",
       "=== VAULT GUIDE (Guia_IA_No_Vault.md) ===",
       "",
       guideContent,
@@ -60,6 +116,12 @@ export function createServer(vaultPath: string, options: CreateServerOptions = {
       "=== ACTIVE PROJECTS (MOC_Missao_Ativa.md) ===",
       "",
       missionContent,
+      "",
+      "=== MEMORY & IDENTITY RULES (Regras_Memoria_e_Identidade_IA.md) ===",
+      "",
+      rulesContent,
+      "",
+      SESSION_CLOSE_PROTOCOL,
     ].join("\n");
   }
 
@@ -73,11 +135,14 @@ export function createServer(vaultPath: string, options: CreateServerOptions = {
         {
           name: "vault_bootstrap",
           description: [
-            "CALL THIS FIRST if you have no prior context about this Obsidian vault.",
-            "Returns two documents in a single call:",
-            "1. The complete vault onboarding guide: folder structure (000-999 layers), YAML schema, full taxonomy vocabulary, how Estado_Atual and Handoff work, rules for IAs, what you can and cannot do.",
-            "2. The active projects list (MOC_Missao_Ativa): all current projects with direct links to Estado_Atual and last Handoff.",
-            "After calling this tool you will have everything needed to operate in this vault without asking the user for explanations.",
+            "CALL THIS FIRST at the start of EVERY session, no exceptions.",
+            "Returns everything you need to operate in this vault:",
+            "1. SESSION START PROTOCOL — mandatory steps to follow right now before doing anything else.",
+            "2. The complete vault onboarding guide: folder structure (000-999 layers), YAML schema, full taxonomy vocabulary, how Estado_Atual and Handoff work, rules for IAs, what you can and cannot do.",
+            "3. The active projects list (MOC_Missao_Ativa): all current projects with direct links to Estado_Atual and last Handoff.",
+            "4. Memory & identity rules: why .claude-pj and local memory are prohibited, why paths must never be hardcoded.",
+            "5. SESSION CLOSE PROTOCOL — mandatory steps you MUST follow at the end of every significant session (update Estado_Atual, create session note, update Handoff, update MOC_Missao_Ativa).",
+            "After calling this tool you will have everything needed to operate without asking the user for explanations.",
           ].join(" "),
           inputSchema: {
             type: "object",
